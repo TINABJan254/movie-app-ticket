@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#121212">
+
+    <TextView
+        android:id="@+id/tvBookingMovieTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tên phim"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Chọn suất chiếu"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="16dp"
+        android:textSize="16sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvShowtimes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginTop="16dp"
+        android:background="#444444" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="MÀN HÌNH"
+        android:textColor="#888888"
+        android:textSize="12sp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="10dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvSeats"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_gravity="center" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="10dp">
+
+        <View android:layout_width="16dp" android:layout_height="16dp" android:background="#777777" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" Trống" android:textColor="#FFF" android:layout_marginEnd="10dp" android:textSize="12sp"/>
+
+        <View android:layout_width="16dp" android:layout_height="16dp" android:background="#E91E63" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" Đang chọn" android:textColor="#FFF" android:layout_marginEnd="10dp" android:textSize="12sp"/>
+
+        <View android:layout_width="16dp" android:layout_height="16dp" android:background="#333333" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" Đã đặt" android:textColor="#FFF" android:textSize="12sp"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvSelectedSeats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ghế chọn: "
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="10dp"/>
+
+    <Button
+        android:id="@+id/btnConfirmBooking"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:backgroundTint="#E91E63"
+        android:text="XÁC NHẬN ĐẶT VÉ"
+        android:layout_marginTop="10dp"/>
+
+</LinearLayout>
