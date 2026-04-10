@@ -1,6 +1,9 @@
 package com.thien.movieticketapp;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -9,7 +12,10 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -17,6 +23,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.WriteBatch;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.thien.movieticketapp.adapters.MovieAdapter;
 import com.thien.movieticketapp.models.Movie;
 import com.thien.movieticketapp.models.Showtime;
@@ -35,6 +42,15 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton btnLogout;
     private Button btnInitData;
 
+    private final ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    getFCMToken();
+                } else {
+                    Toast.makeText(this, "Bạn cần cấp quyền thông báo để nhận nhắc lịch chiếu", Toast.LENGTH_SHORT).show();
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -46,6 +62,9 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        // Xin quyền thông báo
+        askNotificationPermission();
 
         db = FirebaseFirestore.getInstance();
         rvMovies = findViewById(R.id.rvMovies);
@@ -68,10 +87,35 @@ public class MainActivity extends AppCompatActivity {
             finish();
         });
 
-        // Nút nhấn để tạo sạch dữ liệu mới
         btnInitData.setOnClickListener(v -> forceInitializeData());
 
         fetchMovies();
+    }
+
+    private void askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                getFCMToken();
+            } else {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        } else {
+            getFCMToken();
+        }
+    }
+
+    private void getFCMToken() {
+        FirebaseMessaging.getInstance().getToken()
+            .addOnCompleteListener(task -> {
+                if (!task.isSuccessful()) {
+                    Log.w("FCM", "Fetching FCM registration token failed", task.getException());
+                    return;
+                }
+                String token = task.getResult();
+                Log.d("FCM_TOKEN", "Token của máy bạn: " + token);
+                // Bạn có thể lưu token này vào Firestore để gửi thông báo riêng cho User này
+            });
     }
 
     private void fetchMovies() {
@@ -87,56 +131,29 @@ public class MainActivity extends AppCompatActivity {
                         movieList.add(movie);
                     }
                     adapter.notifyDataSetChanged();
-                    Log.d("MainActivity", "Đã load " + movieList.size() + " phim");
                 }
             });
     }
 
     private void forceInitializeData() {
         progressBar.setVisibility(View.VISIBLE);
-        Toast.makeText(this, "Đang khởi tạo dữ liệu, vui lòng đợi...", Toast.LENGTH_SHORT).show();
-
-        // 1. Tạo 2 phim mẫu
         Movie m1 = new Movie(null, "Avengers: Endgame", "Hành động, Viễn tưởng", "https://image.tmdb.org/t/p/w500/or06vSqzWBFscbePxbsGv7nh9pl.jpg", "Action", 181);
-        Movie m2 = new Movie(null, "Spiderman: No Way Home", "Hành động, Phiêu lưu", "https://image.tmdb.org/t/p/w500/1g0vDwsas66W69bccXCYMdzUDOE.jpg", "Action", 148);
-
-        // Add phim thứ nhất
         db.collection("movies").add(m1).addOnSuccessListener(doc1 -> {
             createShowtimesForMovie(doc1.getId());
-            
-            // Add phim thứ hai
-            db.collection("movies").add(m2).addOnSuccessListener(doc2 -> {
-                createShowtimesForMovie(doc2.getId());
-                
-                progressBar.setVisibility(View.GONE);
-                Toast.makeText(this, "KHỞI TẠO THÀNH CÔNG! Collection 'showtimes' đã được tạo.", Toast.LENGTH_LONG).show();
-                fetchMovies(); // Reload UI
-            }).addOnFailureListener(e -> Log.e("FirebaseError", e.getMessage()));
-            
-        }).addOnFailureListener(e -> {
             progressBar.setVisibility(View.GONE);
-            Log.e("FirebaseError", e.getMessage());
-            Toast.makeText(this, "Lỗi: " + e.getMessage() + ". Kiểm tra Rules của Firestore!", Toast.LENGTH_LONG).show();
+            fetchMovies();
         });
     }
 
     private void createShowtimesForMovie(String movieId) {
         WriteBatch batch = db.batch();
         Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.HOUR_OF_DAY, 14); // Bắt đầu từ 14:00
-        cal.set(Calendar.MINUTE, 0);
-
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             String showtimeId = db.collection("showtimes").document().getId();
-            Showtime st = new Showtime(showtimeId, movieId, "Rạp 01", cal.getTime(), 80000 + (i * 5000));
+            Showtime st = new Showtime(showtimeId, movieId, "Rạp 01", cal.getTime(), 80000);
             batch.set(db.collection("showtimes").document(showtimeId), st);
-            cal.add(Calendar.HOUR_OF_DAY, 3); // Mỗi suất cách nhau 3 tiếng
+            cal.add(Calendar.HOUR_OF_DAY, 2);
         }
-        
-        batch.commit().addOnCompleteListener(task -> {
-            if (task.isSuccessful()) {
-                Log.d("MainActivity", "Đã tạo suất chiếu cho movieId: " + movieId);
-            }
-        });
+        batch.commit();
     }
 }

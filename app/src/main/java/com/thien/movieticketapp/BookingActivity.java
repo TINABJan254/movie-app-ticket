@@ -1,24 +1,26 @@
 package com.thien.movieticketapp;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.thien.movieticketapp.adapters.SeatAdapter;
 import com.thien.movieticketapp.adapters.ShowtimeAdapter;
-import com.thien.movieticketapp.models.Movie;
 import com.thien.movieticketapp.models.Seat;
 import com.thien.movieticketapp.models.Showtime;
 import com.thien.movieticketapp.models.Ticket;
@@ -33,8 +35,8 @@ public class BookingActivity extends AppCompatActivity {
     private RecyclerView rvSeats, rvShowtimes;
     private SeatAdapter seatAdapter;
     private ShowtimeAdapter showtimeAdapter;
-    private List<Seat> seatList;
-    private List<Showtime> showtimeList;
+    private List<Seat> seatList = new ArrayList<>();
+    private List<Showtime> showtimeList = new ArrayList<>();
     private List<String> selectedSeatLabels = new ArrayList<>();
     
     private TextView tvMovieTitle, tvSelectedSeats;
@@ -52,52 +54,36 @@ public class BookingActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
         movieId = getIntent().getStringExtra("movieId");
 
-        if (movieId == null) {
-            Toast.makeText(this, "Không tìm thấy ID phim!", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
-
         tvMovieTitle = findViewById(R.id.tvBookingMovieTitle);
         tvSelectedSeats = findViewById(R.id.tvSelectedSeats);
         btnConfirm = findViewById(R.id.btnConfirmBooking);
         rvSeats = findViewById(R.id.rvSeats);
         rvShowtimes = findViewById(R.id.rvShowtimes);
 
-        // Setup Movie Title
-        db.collection("movies").document(movieId).get().addOnSuccessListener(doc -> {
-            if (doc.exists()) tvMovieTitle.setText(doc.getString("title"));
-        });
-
-        // Setup Showtimes
-        showtimeList = new ArrayList<>();
         showtimeAdapter = new ShowtimeAdapter(showtimeList, showtime -> {
             selectedShowtime = showtime;
-            selectedSeatLabels.clear();
-            updateSelectedSeatsUI();
-            initSeats(); // Reset lại ghế khi đổi suất chiếu
+            resetSeats();
             fetchOccupiedSeats();
+            updateSelectedSeatsUI();
         });
-        
-        // Quan trọng: Đảm bảo LayoutManager được set đúng
         rvShowtimes.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         rvShowtimes.setAdapter(showtimeAdapter);
 
-        fetchShowtimes();
-
-        // Setup Seats
-        initSeats();
+        initSeatData(); 
         seatAdapter = new SeatAdapter(seatList, seat -> {
             if (selectedShowtime == null) {
                 Toast.makeText(this, "Vui lòng chọn suất chiếu trước", Toast.LENGTH_SHORT).show();
                 return;
             }
             seat.setSelected(!seat.isSelected());
-            updateSelectedSeatsUI();
             seatAdapter.notifyDataSetChanged();
+            updateSelectedSeatsUI();
         });
         rvSeats.setLayoutManager(new GridLayoutManager(this, 6));
         rvSeats.setAdapter(seatAdapter);
+
+        fetchMovieTitle();
+        fetchShowtimes();
 
         btnConfirm.setOnClickListener(v -> {
             if (selectedShowtime == null) {
@@ -112,8 +98,13 @@ public class BookingActivity extends AppCompatActivity {
         });
     }
 
+    private void fetchMovieTitle() {
+        db.collection("movies").document(movieId).get().addOnSuccessListener(doc -> {
+            if (doc.exists()) tvMovieTitle.setText(doc.getString("title"));
+        });
+    }
+
     private void fetchShowtimes() {
-        // Tạm thời bỏ .orderBy("dateTime") để không bị lỗi thiếu Index
         db.collection("showtimes")
             .whereEqualTo("movieId", movieId)
             .get()
@@ -125,42 +116,39 @@ public class BookingActivity extends AppCompatActivity {
                     showtimeList.add(st);
                 }
                 showtimeAdapter.notifyDataSetChanged();
-                if (showtimeList.isEmpty()) {
-                    Toast.makeText(this, "Phim này hiện chưa có suất chiếu", Toast.LENGTH_SHORT).show();
-                }
-            })
-            .addOnFailureListener(e -> {
-                Log.e("BookingActivity", "Lỗi tải suất chiếu: " + e.getMessage());
-                Toast.makeText(this, "Lỗi kết nối dữ liệu!", Toast.LENGTH_SHORT).show();
             });
     }
 
-    private void initSeats() {
-        seatList = new ArrayList<>();
-        String[] rows = {"A", "B", "C", "D", "E", "F", "G"};
+    private void initSeatData() {
+        seatList.clear();
+        String[] rows = {"A", "B", "C", "D", "E"};
         for (String row : rows) {
             for (int i = 1; i <= 6; i++) {
                 seatList.add(new Seat(row + i));
             }
+        }
+    }
+
+    private void resetSeats() {
+        for (Seat seat : seatList) {
+            seat.setSelected(false);
+            seat.setOccupied(false);
         }
         if (seatAdapter != null) seatAdapter.notifyDataSetChanged();
     }
 
     private void fetchOccupiedSeats() {
         if (selectedShowtime == null) return;
-
         db.collection("tickets")
             .whereEqualTo("showtimeId", selectedShowtime.getId())
             .get()
             .addOnSuccessListener(queryDocumentSnapshots -> {
-                Set<String> occupiedLabels = new HashSet<>();
+                Set<String> occupied = new HashSet<>();
                 for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
-                    Ticket ticket = doc.toObject(Ticket.class);
-                    occupiedLabels.add(ticket.getSeatNumber());
+                    occupied.add(doc.getString("seatNumber"));
                 }
-
                 for (Seat seat : seatList) {
-                    seat.setOccupied(occupiedLabels.contains(seat.getLabel()));
+                    seat.setOccupied(occupied.contains(seat.getLabel()));
                 }
                 seatAdapter.notifyDataSetChanged();
             });
@@ -171,23 +159,42 @@ public class BookingActivity extends AppCompatActivity {
         for (Seat seat : seatList) {
             if (seat.isSelected()) selectedSeatLabels.add(seat.getLabel());
         }
-        
-        StringBuilder sb = new StringBuilder("Ghế chọn: ");
-        for (int i = 0; i < selectedSeatLabels.size(); i++) {
-            sb.append(selectedSeatLabels.get(i));
-            if (i < selectedSeatLabels.size() - 1) sb.append(", ");
-        }
-        tvSelectedSeats.setText(sb.toString());
+        tvSelectedSeats.setText("Ghế chọn: " + (selectedSeatLabels.isEmpty() ? "Chưa chọn" : String.join(", ", selectedSeatLabels)));
     }
 
     private void performBooking() {
         String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        String movieTitle = tvMovieTitle.getText().toString();
+        
         for (String seatLabel : selectedSeatLabels) {
             String ticketId = db.collection("tickets").document().getId();
             Ticket ticket = new Ticket(ticketId, userId, selectedShowtime.getId(), seatLabel, new Date());
             db.collection("tickets").document(ticketId).set(ticket);
         }
+
+        // Gửi thông báo ngay lập tức
+        sendBookingNotification(movieTitle, String.join(", ", selectedSeatLabels));
+
         Toast.makeText(this, "Đặt vé thành công!", Toast.LENGTH_LONG).show();
         finish();
+    }
+
+    private void sendBookingNotification(String movieName, String seats) {
+        String channelId = "movie_reminder_channel";
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(channelId, "Thông báo đặt vé", NotificationManager.IMPORTANCE_HIGH);
+            notificationManager.createNotificationChannel(channel);
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Đặt vé thành công!")
+                .setContentText("Bạn đã đặt vé phim " + movieName + " tại ghế: " + seats)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true);
+
+        notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 }
